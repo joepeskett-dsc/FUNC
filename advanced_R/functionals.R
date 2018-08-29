@@ -119,3 +119,228 @@ apply(a, 2, mean)
 #The difficulty in using this is that you often aren't sure what sort of output 
 #you're going to get. This means it is not well suited to being used in new
 #functions. It is also not idempotent(?).
+
+#outer() is another interesting function, taking multiple vector inputs and
+#creates a matrix or array where the function is run over every combination of
+#inputs. Example below:
+
+outer(1:5, 5:10, "*")
+
+#Group apply
+
+#tapply can be used where there is a differing number of columns between rows.It
+#works by creating a ragged data structure of inputs and then applying the 
+#function to each of these. This is actually what the split() function does.
+#Therefore a new tapply() function can be created like so:
+
+my_tapply <- function(x,group, f, ..., simplify = TRUE){
+    pieces <- split(x, group)
+    sapply(pieces, f, ..., simplify = simplify)
+}
+
+#PLYR! Issue with the base functionals is that they have developed over time and
+#are not particularly consistent.
+
+#In plyr the first two letters indicate the input and output structure
+#respectively. For example dlply takes a dataframe, applies a function to each
+#column and then returns a list.
+
+# Manipulating lists. 
+
+# Reduce()
+
+#Reduces a vector to a single value by recursively calling a function,f, two
+#functions at a time.It looks like this:
+#Reduce(f, 1:3) => f(f(1,2),3)
+#Reduce is known as a fold also. It can be rewritten like so:
+
+my_reduce <- function(f,x){
+    out <- x[[1]]
+    for (i in seq(2, length(x))){
+        out <- f(out, x[[i]])
+    }
+    out
+}
+#Reduce() is actually more complicated as it has more control functionality.
+
+# Predicate functionals. 
+
+#A function that returns a single TRUE or FALSE. There a three useful predicates
+#in base R. 
+#Filter() selects only elements that match the predicate.
+#Find() selects the first element that matches the predicate.
+#Position() returns the position of the first element that matches the predicate. 
+#Another useful one is where.
+
+where <- function(f, x){
+    vapply(x, f, FUN.VALUE = logical(1))
+}
+df <- data.frame(x = 1:3, y = c("a", "b", "c"))
+where(is.factor, df)
+
+#Implement Any()
+
+Any <- function(f, x){
+    any(where(f,x))
+}
+#Implement All()
+
+All <- function(f,x){
+    all(where(f,x))   
+}
+
+
+#Mathematical functions:
+
+#Functionals are very common in mathematics. Here we'll look at 3, though it's
+#not obvious how these help to avoid loops.
+
+#integrate() finds the area under a curve defined by f()
+#uniroot finds where f() hits zero
+#optimise() finds the location of the lowest of highest value of f()
+
+#In stats optimisation is often used for maximum liklihood estimation (MLE). In 
+#MLE we have two parameters - the data and the parameters which vary as we try 
+#to find the maxuimum. The data are fixed. Closures lend themselves to being
+#helpful for this problem.
+
+#The following example shows how we might find the MLE. We need a function 
+#factory that returns a functions that comptes the negative log liklihood (NLL) 
+#for parameter llambda. (We're using a poisson distribution).We often use NLL as
+#optimise defaults to finding minimum in R.
+
+poisson_nll <- function(x){
+    n <- length(x)
+    sum_x <- sum(x)
+    function(lambda){
+        n * lambda - sum_x * log(lambda)
+    }
+}
+
+#Note what is happening here - when we create a new function with the
+#poission_nll function, the data is fixed in the execution environment, which is
+#saved by the created function's enclosing environment.
+
+#We can then use the optimise() function to find the best values given a range
+#of inputs for lambda.
+
+#optim() is another useful function, that works in more than one dimension. For 
+#interest, there is a version of optim writen in pure R in the Rvmin
+#package.Interestingly, this runs no slower, even though base optim() is written
+#in C.
+
+#Exercises:
+
+#implement arg_max()
+
+arg_max <- function(x, f){
+    x[f(x)==max(f(x))]
+}
+
+
+#-------------------------------------------------------------------------------
+#Loops that can and should be left:
+#modiying in place,
+#recursive functions, 
+#while loops
+
+#Modifyingin place: if you are transforming a data frame and each variable is
+#undergoing a different functional transformation, a for loop still may be best,
+#with the differnt functions given different names in a list.
+
+#Recurrent relationships can make it hard to express a loop as a functional. For
+#example, taking a weighted average. You can solve the recurrence relation, but
+#this requires a new set of tools which will be tackled later.
+
+#While loops
+
+#While loops are more general the for loops - all for loops can be written as
+#while loop, but this relationship is not true in reverse. 
+for (i in 1:10) print(i)
+
+i <- 1
+while (i <= 10){
+    print(i)
+    i <- i+1
+}
+# The difficulty is many while loops do not know how many while loops don't know
+# how many times they'll be run.
+
+i <- 0
+while(TRUE){
+    if(runif(1) > 0.9) break
+    i <- i+1
+}
+
+#This problem is common in simulations. In some cases, loops can be removed by 
+#recognising special features in problems. In the example above we're counting 
+#the number of successes before bernouli trial with p=0.1 fails. This is a 
+#geometric random variable so can be replaced. This can often be difficult to
+#do, but there are often substantial benefits to doing this.
+
+# A family of functions:
+
+add <- function(x,y){
+    stopifnot(length(x) == 1, length(y) ==1, is.numeric(x), is.numeric(y))
+    x+y
+}
+rm_na <- function(x,y,identity){
+    if(is.na(x) && is.na(y)){
+        identity
+    }else if(is.na(x)){
+        y
+    }else{
+        x
+    }
+}
+add <- function(x,y,na.rm = FALSE){
+    if(na.rm && (is.na(x) || is.na(y)))rm_na(x,y,0) else x+y
+}
+add(9,NA, na.rm = TRUE)
+add(10,10)
+
+#at this point we have a basic function that can add two numbers together and 
+#deal with NA values. How can we expand this to deal with more than two numbers.
+
+r_add <- function(xs, na.rm = TRUE){
+    Reduce(function(x,y)add(x,y,na.rm = na.rm), xs)
+}
+r_add(c(1,4,10))
+
+#Good. Does it still work with special cases?
+r_add(NA, na.rm = TRUE)
+#While not a major problem, it's incorrect. If we give Reduce() a vector of 
+#length 1, it can't reduce it so returns it's input. We can over come this with
+#the init argument.
+
+r_add <- function(xs, na.rm = TRUE){
+    Reduce(function(x,y)add(x,y,na.rm = na.rm), xs, init = 0)
+}
+r_add(c(1,4,10))
+r_add(NA, na.rm = T)
+
+#It would also be nice to vectorise this, meaning that we can give multiple
+#vectors as the objects to be added together.Let's have a look at some options. 
+
+v_add1 <- function(x,y,na.rm = FALSE){
+    stopifnot(length(x) == length(y), is.numeric(x), is.numeric(y))
+    if (length(x) == 0) return(numeric())
+    simplify2array(
+        Map(function(x,y)add(x,y,na.rm = na.rm), x, y)
+    )
+}
+v_add2 <- function(x, y, na.rm = FALSE){
+    stopifnot(length(x) == length(y), is.numeric(x), is.numeric(y))
+    vapply(seq_along(x), function(i) add(x[i], y[i], na.rm = na.rm),
+    numeric(1))
+}
+v_add1(1:10, 1:10)
+v_add2(1:10, 1:10)
+
+#Exercises: 
+#Implement smaller and larger functions that given two inputs return
+#either the smaller or larger.
+
+smaller <- function(x,y,na.rm = T){}
+
+larger <- function(x,y,na.rm = T){}
